@@ -1,54 +1,79 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
-export default function Player({
-  currentSong,
-  isPlaying,
-  currentTime,
-  duration,
-  volume,
-  onPlayPause,
-  onPrev,
-  onNext,
-  onRepeat,
-  isRepeat,
-  onVolumeChange,
-  onProgressClick,
-  loading,
-}) {
+export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause, onPrev, onNext, onRepeat, isRepeat, volume, onVolumeChange, onProgressClick, loading, onTimeUpdate, onDurationChange }) {
   const audioRef = useRef(null);
-  const progressBarRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [localLoading, setLocalLoading] = useState(false);
 
-  // 当 currentSong 变化时，更新 audio 的 src
+  // 初始化音频（只在组件挂载时创建一次）
   useEffect(() => {
-    if (audioRef.current && currentSong) {
-      audioRef.current.src = currentSong.src;
+    const audio = new Audio();
+    audioRef.current = audio;
+
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleLoadStart = () => setLocalLoading(true);
+    const handleCanPlay = () => setLocalLoading(false);
+    const handleEnded = () => {
+      if (isRepeat) {
+        audio.currentTime = 0;
+        audio.play();
+      } else {
+        onNext();
+      }
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('loadstart', handleLoadStart);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.pause();
+      audio.src = '';
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('ended', handleEnded);
+      audioRef.current = null;
+    };
+  }, []); // 空依赖，确保只执行一次
+
+  // 当歌曲变化时更新 src
+  useEffect(() => {
+    if (audioRef.current && song) {
+      audioRef.current.src = song.src;
       audioRef.current.load();
-      if (isPlaying) {
+      setCurrentTime(0);
+      if (externalIsPlaying) {
         audioRef.current.play().catch(e => console.error(e));
       }
     }
-  }, [currentSong]);
+  }, [song]);
 
-  // 监听播放状态
+  // 控制播放/暂停
   useEffect(() => {
     if (!audioRef.current) return;
-    if (isPlaying) {
+    if (externalIsPlaying) {
       audioRef.current.play().catch(e => console.error(e));
     } else {
       audioRef.current.pause();
     }
-  }, [isPlaying]);
+  }, [externalIsPlaying]);
 
-  // 监听音量
+  // 控制音量
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
     }
   }, [volume]);
 
-  // 监听循环模式
+  // 控制循环
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.loop = isRepeat;
@@ -63,47 +88,43 @@ export default function Player({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  return (
-    <div className={`player-content ${isPlaying ? 'playing' : ''}`}>
-      {/* 隐藏的 audio 元素，由 ref 控制 */}
-      <audio
-        ref={audioRef}
-        onTimeUpdate={(e) => onProgressClick.currentTime?.(e.target.currentTime)} // 实际通过父组件传递的 onTimeUpdate 处理
-        onLoadedMetadata={(e) => onProgressClick.duration?.(e.target.duration)}
-        onEnded={onNext}
-      />
+  // 进度条点击
+  const handleProgressClick = (e) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const newTime = percent * duration;
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
 
+  // 播放/暂停按钮
+  const togglePlay = () => {
+    onPlayPause();
+  };
+
+  return (
+    <div className={`player-content ${externalIsPlaying ? 'playing' : ''}`}>
       <div className="album-section">
         <div className="album-cover">
-          <img src={currentSong?.cover} alt="专辑封面" />
-          {loading && (
+          <img src={song?.cover} alt="专辑封面" />
+          {(localLoading || loading) && (
             <div className="loading active">
               <div className="loading-spinner"></div>
             </div>
           )}
         </div>
         <div className="song-info">
-          <h2 className="song-title">{currentSong?.title}</h2>
-          <p className="song-artist">{currentSong?.artist}</p>
-          <p className="song-album">{currentSong?.album}</p>
+          <h2 className="song-title">{song?.title}</h2>
+          <p className="song-artist">{song?.artist}</p>
+          <p className="song-album">{song?.album}</p>
         </div>
       </div>
 
       <div className="controls-section">
         <div className="progress-area">
-          <div
-            className="progress-bar"
-            ref={progressBarRef}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const percent = (e.clientX - rect.left) / rect.width;
-              onProgressClick(percent);
-            }}
-          >
-            <div
-              className="progress"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            ></div>
+          <div className="progress-bar" onClick={handleProgressClick}>
+            <div className="progress" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
           </div>
           <div className="timer">
             <span>{formatTime(currentTime)}</span>
@@ -115,8 +136,8 @@ export default function Player({
           <button className="control-btn" onClick={onPrev} title="上一首">
             <i className="fas fa-step-backward"></i>
           </button>
-          <button className="control-btn play-pause" onClick={onPlayPause} title="播放/暂停">
-            <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
+          <button className="control-btn play-pause" onClick={togglePlay} title="播放/暂停">
+            <i className={`fas ${externalIsPlaying ? 'fa-pause' : 'fa-play'}`}></i>
           </button>
           <button className="control-btn" onClick={onNext} title="下一首">
             <i className="fas fa-step-forward"></i>
