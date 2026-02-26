@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { songs } from '@/lib/songs';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -12,100 +12,30 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
   const [volume, setVolume] = useState(70);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
-
-  const audioRef = useRef(null);
-  const progressBarRef = useRef(null);
 
   const currentSong = songs[currentIndex];
 
-  // 初始化 audio 元素并设置事件监听
-  useEffect(() => {
-    audioRef.current = new Audio();
-    audioRef.current.volume = volume / 100;
-
-    const audio = audioRef.current;
-
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleLoadedMetadata = () => setDuration(audio.duration);
-    const handleLoadStart = () => setLoading(true);
-    const handleCanPlay = () => setLoading(false);
-    const handleEnded = () => {
-      if (isRepeat) {
-        audio.currentTime = 0;
-        audio.play();
-      } else {
-        handleNext();
-      }
-    };
-
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('loadstart', handleLoadStart);
-    audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('ended', handleEnded);
-
-    return () => {
-      audio.pause();
-      audio.src = '';
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('loadstart', handleLoadStart);
-      audio.removeEventListener('canplay', handleCanPlay);
-      audio.removeEventListener('ended', handleEnded);
-    };
-  }, []);
-
-  // 当前歌曲变化时加载
-  useEffect(() => {
-    if (audioRef.current && currentSong) {
-      audioRef.current.src = currentSong.src;
-      audioRef.current.load();
-      if (isPlaying) {
-        audioRef.current.play().catch(e => console.error(e));
-      }
-    }
-  }, [currentIndex]);
-
-  // 播放/暂停控制
   const handlePlayPause = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(e => console.error(e));
-    }
     setIsPlaying(!isPlaying);
   };
 
   const handlePrev = () => {
     setCurrentIndex((prev) => (prev - 1 + songs.length) % songs.length);
+    setIsPlaying(true);
   };
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % songs.length);
+    setIsPlaying(true);
   };
 
   const handleRepeat = () => {
     setIsRepeat(!isRepeat);
-    if (audioRef.current) {
-      audioRef.current.loop = !isRepeat;
-    }
   };
 
   const handleVolumeChange = (val) => {
     setVolume(val);
-    if (audioRef.current) {
-      audioRef.current.volume = val / 100;
-    }
-  };
-
-  const handleProgressClick = (percent) => {
-    if (audioRef.current && duration) {
-      audioRef.current.currentTime = percent * duration;
-    }
   };
 
   const handleSelectSong = (index) => {
@@ -131,7 +61,7 @@ export default function Home() {
           热爱音乐和代码，喜欢分享生活中的美好。这个页面是我的个人空间，你可以在这里听听我喜欢的歌，也可以找到我的社交账号。
         </p>
         <div className="social-links">
-          <a href="https://github.com/maloucoco" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/你的用户名" target="_blank" rel="noopener noreferrer">
             <i className="fab fa-github"></i>
           </a>
           <a href="https://twitter.com/你的用户名" target="_blank" rel="noopener noreferrer">
@@ -150,18 +80,15 @@ export default function Home() {
       <section className="player-section" id="music">
         <div className="player-container">
           <Player
-            currentSong={currentSong}
+            song={currentSong}
             isPlaying={isPlaying}
-            currentTime={currentTime}
-            duration={duration}
-            volume={volume}
             onPlayPause={handlePlayPause}
             onPrev={handlePrev}
             onNext={handleNext}
             onRepeat={handleRepeat}
             isRepeat={isRepeat}
+            volume={volume}
             onVolumeChange={handleVolumeChange}
-            onProgressClick={handleProgressClick}
             loading={loading}
           />
           <Playlist

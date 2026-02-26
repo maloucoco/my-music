@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause, onPrev, onNext, onRepeat, isRepeat, volume, onVolumeChange, onProgressClick, loading, onTimeUpdate, onDurationChange }) {
+export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause, onPrev, onNext, onRepeat, isRepeat, volume, onVolumeChange, loading }) {
   const audioRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -13,8 +13,13 @@ export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause
     const audio = new Audio();
     audioRef.current = audio;
 
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      setCurrentTime(0);
+    };
     const handleLoadStart = () => setLocalLoading(true);
     const handleCanPlay = () => setLocalLoading(false);
     const handleEnded = () => {
@@ -42,7 +47,7 @@ export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause
       audio.removeEventListener('ended', handleEnded);
       audioRef.current = null;
     };
-  }, []); // 空依赖，确保只执行一次
+  }, []); // 空依赖，只执行一次
 
   // 当歌曲变化时更新 src
   useEffect(() => {
@@ -82,20 +87,24 @@ export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause
 
   // 格式化时间
   const formatTime = (seconds) => {
-    if (isNaN(seconds)) return '0:00';
+    if (isNaN(seconds) || seconds < 0) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // 进度条点击
+  // 进度条点击跳转
   const handleProgressClick = (e) => {
-    if (!audioRef.current || !duration) return;
+    if (!audioRef.current) return;
+    // 如果 duration 未获取到（为0或NaN），无法跳转
+    if (!duration || duration <= 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
-    const newTime = percent * duration;
+    // 限制百分比在 0~1 之间
+    const clampedPercent = Math.max(0, Math.min(1, percent));
+    const newTime = clampedPercent * duration;
     audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    setCurrentTime(newTime); // 立即更新 UI，提高响应感
   };
 
   // 播放/暂停按钮
@@ -124,7 +133,10 @@ export default function Player({ song, isPlaying: externalIsPlaying, onPlayPause
       <div className="controls-section">
         <div className="progress-area">
           <div className="progress-bar" onClick={handleProgressClick}>
-            <div className="progress" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
+            <div
+              className="progress"
+              style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            ></div>
           </div>
           <div className="timer">
             <span>{formatTime(currentTime)}</span>
